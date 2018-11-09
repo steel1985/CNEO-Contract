@@ -18,6 +18,9 @@ namespace CNEO
         public static event deleRefundTarget Refunded;
         public delegate void deleRefundTarget(byte[] txId, byte[] who);
 
+        //admin account
+        private static readonly byte[] admin = Helper.ToScriptHash("AZ77FiX7i9mRUPF2RyuJD2L8kS6UDnQ9Y7");
+
         private static readonly byte[] AssetId = Helper.HexToBytes("9b7cffdaa674beae0f930ebe6085af9093e5fe56b34a5c220ccdcf6efc336fc5"); //NEO Asset ID, littleEndian
 
         //StorageMap contract, key: "totalSupply"
@@ -32,42 +35,58 @@ namespace CNEO
                 var tx = ExecutionEngine.ScriptContainer as Transaction;
                 var inputs = tx.GetInputs();
                 var outputs = tx.GetOutputs();
-                //Check if the input has been marked
-                foreach (var input in inputs)
+                //ClaimTransaction = 0x02   ContractTransaction = 0x80 InvocationTransaction = 0xd1
+                var type = (byte)tx.Type;
+                if (type == 0x80 || type == 0xd1)
                 {
-                    if (input.PrevIndex == 0)//If UTXO n is 0, it is possible to be a marker UTXO
+                    //Check if the input has been marked
+                    foreach (var input in inputs)
                     {
-                        StorageMap refund = Storage.CurrentContext.CreateMap(nameof(refund));
-                        var refundMan = refund.Get(input.PrevHash); //0.1
-                        //If the input that is marked for refund
-                        if (refundMan.Length > 0)
+                        if (input.PrevIndex == 0)//If UTXO n is 0, it is possible to be a marker UTXO
                         {
-                            //Only one input and one output is allowed in refund
-                            if (inputs.Length != 1 || outputs.Length != 1)
-                                return false;
-                            return outputs[0].ScriptHash.AsBigInteger() == refundMan.AsBigInteger();
+                            StorageMap refund = Storage.CurrentContext.CreateMap(nameof(refund));
+                            var refundMan = refund.Get(input.PrevHash); //0.1
+                                                                        //If the input that is marked for refund
+                            if (refundMan.Length > 0)
+                            {
+                                //Only one input and one output is allowed in refund
+                                if (inputs.Length != 1 || outputs.Length != 1)
+                                    return false;
+                                return outputs[0].ScriptHash.AsBigInteger() == refundMan.AsBigInteger();
+                            }
                         }
                     }
-                }
-                var currentHash = ExecutionEngine.ExecutingScriptHash;
-                //If all the inputs are not marked for refund
-                BigInteger inputAmount = 0;
-                foreach (var refe in tx.GetReferences())
-                {
-                    if (refe.AssetId.AsBigInteger() != AssetId.AsBigInteger())
-                        return false;//Not allowed to operate assets other than NEO
+                    var currentHash = ExecutionEngine.ExecutingScriptHash;
+                    //If all the inputs are not marked for refund
+                    BigInteger inputAmount = 0;
+                    foreach (var refe in tx.GetReferences())
+                    {
+                        if (refe.AssetId.AsBigInteger() != AssetId.AsBigInteger())
+                            return false;//Not allowed to operate assets other than NEO
 
-                    if (refe.ScriptHash.AsBigInteger() == currentHash.AsBigInteger())
-                        inputAmount += refe.Value;
+                        if (refe.ScriptHash.AsBigInteger() == currentHash.AsBigInteger())
+                            inputAmount += refe.Value;
+                    }
+                    //Check that there is no money left this contract
+                    BigInteger outputAmount = 0;
+                    foreach (var output in outputs)
+                    {
+                        if (output.ScriptHash.AsBigInteger() == currentHash.AsBigInteger())
+                            outputAmount += output.Value;
+                    }
+                    return outputAmount == inputAmount;
                 }
-                //Check that there is no money left this contract
-                BigInteger outputAmount = 0;
-                foreach (var output in outputs)
+                else if (type == 0x02)
                 {
-                    if (output.ScriptHash.AsBigInteger() == currentHash.AsBigInteger())
-                        outputAmount += output.Value;
+                    if ((outputs.Length == 1) && (outputs[0].ScriptHash.AsBigInteger() == admin.AsBigInteger()))
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
                 }
-                return outputAmount == inputAmount;
             }
             else if (Runtime.Trigger == TriggerType.Application)
             {
@@ -259,6 +278,21 @@ namespace CNEO
             StorageMap txInfo = Storage.CurrentContext.CreateMap(nameof(txInfo));
             txInfo.Put(txid, Helper.Serialize(info)); //1
         }
+
+        //private static bool checkAdmin()
+        //{
+        //    byte[] currAdmin = Storage.Get(Storage.CurrentContext, getAccountKey(ADMIN_ACCOUNT.AsByteArray()));
+        //    if (currAdmin.Length > 0)
+        //    {
+        //        当前地址和配置地址必须一致
+        //        if (!Runtime.CheckWitness(currAdmin)) return false;
+        //    }
+        //    else
+        //    {
+        //        if (!Runtime.CheckWitness(admin)) return false;
+        //    }
+        //    return true;
+        //}
 
         [DisplayName("symbol")]
         public static string Symbol() => "CNEO";
