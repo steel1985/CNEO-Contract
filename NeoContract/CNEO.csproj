@@ -46,7 +46,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CNEO.cs" />
+    <Compile Include="SNEO.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TransferInfo.cs" />
   </ItemGroup>

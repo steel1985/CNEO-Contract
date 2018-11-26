@@ -6,9 +6,9 @@ using System.ComponentModel;
 using System.Numerics;
 using System;
 
-namespace CNEO
+namespace SNEO
 {
-    public class CNEO : SmartContract
+    public class SNEO : SmartContract
     {
         [DisplayName("transfer")]
         public static event deleTransfer Transferred;
@@ -216,7 +216,7 @@ namespace CNEO
         }
 
         [DisplayName("name")]
-        public static string Name() => "NEP5 NEO";
+        public static string Name() => "Standards NEO";
 
         /// <summary>
         /// NEP5 Asset -> Global Asset
@@ -295,7 +295,7 @@ namespace CNEO
         //}
 
         [DisplayName("symbol")]
-        public static string Symbol() => "CNEO";
+        public static string Symbol() => "SNEO";
 
         [DisplayName("supportedStandards")]
         public static string SupportedStandards() => "{\"NEP-5\", \"NEP-7\", \"NEP-10\"}";
