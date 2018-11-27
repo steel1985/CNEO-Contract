@@ -10,6 +10,10 @@ namespace SNEO
 {
     public class SNEO : SmartContract
     {
+        //Static param
+        private const string ADMIN_ACCOUNT = "admin_account";
+        private const string CLAIM_ACCOUNT = "claim_account";
+
         [DisplayName("transfer")]
         public static event deleTransfer Transferred;
         public delegate void deleTransfer(byte[] from, byte[] to, BigInteger value);
@@ -19,7 +23,7 @@ namespace SNEO
         public delegate void deleRefundTarget(byte[] txId, byte[] who);
 
         //admin account
-        private static readonly byte[] admin = Helper.ToScriptHash("AZ77FiX7i9mRUPF2RyuJD2L8kS6UDnQ9Y7");
+        private static readonly byte[] committee = Helper.ToScriptHash("AZ77FiX7i9mRUPF2RyuJD2L8kS6UDnQ9Y7");
 
         private static readonly byte[] AssetId = Helper.HexToBytes("9b7cffdaa674beae0f930ebe6085af9093e5fe56b34a5c220ccdcf6efc336fc5"); //NEO Asset ID, littleEndian
 
@@ -78,7 +82,12 @@ namespace SNEO
                 }
                 else if (type == 0x02)
                 {
-                    if ((outputs.Length == 1) && (outputs[0].ScriptHash.AsBigInteger() == admin.AsBigInteger()))
+                    StorageMap account = Storage.CurrentContext.CreateMap(nameof(account));
+                    byte[] currClaim = account.Get(CLAIM_ACCOUNT.AsByteArray());
+                    if (currClaim.Length == 0)
+                        currClaim = committee;
+
+                    if ((outputs.Length == 1) && (outputs[0].ScriptHash.AsBigInteger() == currClaim.AsBigInteger()))
                     {
                         return true;
                     }
@@ -113,6 +122,8 @@ namespace SNEO
                 if (method == "totalSupply") return TotalSupply();
 
                 if (method == "transfer") return Transfer((byte[])args[0], (byte[])args[1], (BigInteger)args[2], callscript);
+
+                if (method == "setAccount") return SetAccount((string)args[0], (byte[])args[1]);
             }
             else if (Runtime.Trigger == TriggerType.VerificationR) //Backward compatibility, refusing to accept other assets
             {
@@ -157,6 +168,40 @@ namespace SNEO
             var result = txInfo.Get(txId); //0.1
             if (result.Length == 0) return null;
             return Helper.Deserialize(result) as TransferInfo;
+        }
+
+        /*     
+        * The committee account can set a new commitee account and set a legal SAR4C contract  
+        */
+        [DisplayName("setAccount")]
+        public static bool SetAccount(string key, byte[] address)
+        {
+            if (!checkAdmin()) return false;
+
+            if(key.Length == 0)
+                throw new InvalidOperationException("The parameters key length SHOULD be greater 0.");
+
+            if (address.Length != 20)
+                throw new InvalidOperationException("The parameters address and to SHOULD be 20-byte addresses.");
+
+            StorageMap account = Storage.CurrentContext.CreateMap(nameof(account));
+            account.Put(key.AsByteArray(), address);
+            return true;
+        }
+
+        private static bool checkAdmin()
+        {
+            StorageMap account = Storage.CurrentContext.CreateMap(nameof(account));
+            byte[] currAdmin = account.Get(ADMIN_ACCOUNT.AsByteArray());
+            if (currAdmin.Length > 0)
+            {
+                if (!Runtime.CheckWitness(currAdmin)) return false;
+            }
+            else
+            {
+                if (!Runtime.CheckWitness(committee)) return false;
+            }
+            return true;
         }
 
         private static bool IsPayable(byte[] to)
@@ -278,21 +323,6 @@ namespace SNEO
             StorageMap txInfo = Storage.CurrentContext.CreateMap(nameof(txInfo));
             txInfo.Put(txid, Helper.Serialize(info)); //1
         }
-
-        //private static bool checkAdmin()
-        //{
-        //    byte[] currAdmin = Storage.Get(Storage.CurrentContext, getAccountKey(ADMIN_ACCOUNT.AsByteArray()));
-        //    if (currAdmin.Length > 0)
-        //    {
-        //        当前地址和配置地址必须一致
-        //        if (!Runtime.CheckWitness(currAdmin)) return false;
-        //    }
-        //    else
-        //    {
-        //        if (!Runtime.CheckWitness(admin)) return false;
-        //    }
-        //    return true;
-        //}
 
         [DisplayName("symbol")]
         public static string Symbol() => "SNEO";
